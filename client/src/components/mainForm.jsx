@@ -23,7 +23,7 @@ export const MainForm = () => {
     setLoading(true); // Start loader
     try {
       console.log("Form Data:", formData);
-      const response = await axios.post("http://localhost:8000/results", formData);
+      const response = await axios.post("https://result-zq31.onrender.com/results", formData);
       setResults(response.data);
       console.log("Response:", response);
     } catch (error) {
