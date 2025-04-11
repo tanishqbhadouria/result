@@ -5,7 +5,9 @@ import { results } from './results.js';
 
 const app = express();
 app.use(cors(
-    origin = 'https://result-gray-five.vercel.app',
+   {
+    origin: 'https://result-gray-five.vercel.app',
+   }
 ));
 
 app.use(express.json());
