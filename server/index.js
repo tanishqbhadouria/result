@@ -73,60 +73,6 @@ app.get('/student/:rollNo', async (req, res) => {
     }
 });
 
-// Endpoint to get raw HTML for a specific student
-app.get('/student/:rollNo/html', async (req, res) => {
-    try {
-        const { rollNo } = req.params;
-        console.log(`Fetching stored HTML for roll no: ${rollNo}`);
-        
-        const htmlData = await ResultService.getStoredHtml(rollNo);
-        if (htmlData) {
-            res.json(htmlData);
-        } else {
-            res.status(404).json({ message: 'HTML not found for this student' });
-        }
-    } catch (error) {
-        console.error('Error in /student/html endpoint:', error);
-        res.status(500).json({ 
-            error: 'Failed to fetch stored HTML',
-            message: error.message 
-        });
-    }
-});
-
-// Endpoint to get HTML storage statistics
-app.get('/admin/html-stats', async (req, res) => {
-    try {
-        const stats = await ResultService.getHtmlStats();
-        res.json(stats);
-    } catch (error) {
-        console.error('Error in /admin/html-stats endpoint:', error);
-        res.status(500).json({ 
-            error: 'Failed to fetch HTML statistics',
-            message: error.message 
-        });
-    }
-});
-
-// Endpoint to clean old HTML files
-app.delete('/admin/clean-html/:days?', async (req, res) => {
-    try {
-        const days = parseInt(req.params.days) || 30;
-        const deletedCount = await ResultService.cleanOldHtmlFiles(days);
-        res.json({ 
-            message: `Cleaned ${deletedCount} old HTML files`,
-            deletedCount: deletedCount,
-            daysOld: days
-        });
-    } catch (error) {
-        console.error('Error in /admin/clean-html endpoint:', error);
-        res.status(500).json({ 
-            error: 'Failed to clean HTML files',
-            message: error.message 
-        });
-    }
-});
-
 // Additional endpoint to clear cache if needed
 app.delete('/cache', async (req, res) => {
     try {

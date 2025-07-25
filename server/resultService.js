@@ -207,7 +207,7 @@ export class ResultService {
     }
 
     /**
-     * Get detailed result for a specific student
+     * Get detailed result for a specific student (returns raw HTML)
      */
     static async getStudentDetailedResult(rollNo) {
         try {
@@ -220,11 +220,12 @@ export class ResultService {
                 htmlData.lastAccessed = new Date();
                 await htmlData.save();
                 
-                // Extract detailed information from cached HTML
-                const detailedResult = this.extractDetailedData(htmlData.htmlContent);
-                detailedResult.source = 'cache';
-                detailedResult.cachedAt = htmlData.fetchedAt;
-                return detailedResult;
+                return {
+                    htmlContent: htmlData.htmlContent,
+                    source: 'cache',
+                    cachedAt: htmlData.fetchedAt,
+                    rollNo: rollNo
+                };
             }
             
             // If not in cache, fetch from API
@@ -232,22 +233,23 @@ export class ResultService {
             const response = await axios.get(`http://results.ietdavv.edu.in/DisplayStudentResult?rollno=${rollNo}&typeOfStudent=Regular`);
             const html = response.data;
             
-            if (!html) {
+            if (!html || html.trim() === '') {
                 throw new Error('No data received from API');
             }
             
             // Store the HTML in database for future use
             await this.storeHtmlResult(rollNo, html);
             
-            // Extract detailed information from fresh HTML
-            const detailedResult = this.extractDetailedData(html);
-            detailedResult.source = 'api';
-            detailedResult.fetchedAt = new Date().toISOString();
-            return detailedResult;
+            return {
+                htmlContent: html,
+                source: 'api',
+                fetchedAt: new Date().toISOString(),
+                rollNo: rollNo
+            };
             
         } catch (error) {
             console.error(`Error fetching detailed result for ${rollNo}:`, error);
-            throw new Error(`Failed to fetch detailed result for ${rollNo}`);
+            throw new Error(`Failed to fetch detailed result for ${rollNo}: ${error.message}`);
         }
     }
 
