@@ -1,6 +1,9 @@
 import { Result } from './Models/result.model.js';
 import { BatchResult } from './Models/classSemester.model.js';
+import { HtmlResult } from './Models/htmlResult.model.js';
 import { results as fetchFromAPI } from './results.js';
+import cheerio from 'cheerio';
+import axios from 'axios';
 
 export class ResultService {
     
@@ -201,5 +204,235 @@ export class ResultService {
         });
         
         console.log(`Cleared cache for ${year}-${branch}-${semester}-${section}`);
+    }
+
+    /**
+     * Get detailed result for a specific student
+     */
+    static async getStudentDetailedResult(rollNo) {
+        try {
+            // First check if we have the HTML stored in database
+            let htmlData = await HtmlResult.findOne({ rollNo: rollNo, isActive: true });
+            
+            if (htmlData) {
+                console.log(`Found cached HTML for ${rollNo}`);
+                // Update last accessed time
+                htmlData.lastAccessed = new Date();
+                await htmlData.save();
+                
+                // Extract detailed information from cached HTML
+                const detailedResult = this.extractDetailedData(htmlData.htmlContent);
+                detailedResult.source = 'cache';
+                detailedResult.cachedAt = htmlData.fetchedAt;
+                return detailedResult;
+            }
+            
+            // If not in cache, fetch from API
+            console.log(`Fetching fresh HTML for ${rollNo} from API`);
+            const response = await axios.get(`http://results.ietdavv.edu.in/DisplayStudentResult?rollno=${rollNo}&typeOfStudent=Regular`);
+            const html = response.data;
+            
+            if (!html) {
+                throw new Error('No data received from API');
+            }
+            
+            // Store the HTML in database for future use
+            await this.storeHtmlResult(rollNo, html);
+            
+            // Extract detailed information from fresh HTML
+            const detailedResult = this.extractDetailedData(html);
+            detailedResult.source = 'api';
+            detailedResult.fetchedAt = new Date().toISOString();
+            return detailedResult;
+            
+        } catch (error) {
+            console.error(`Error fetching detailed result for ${rollNo}:`, error);
+            throw new Error(`Failed to fetch detailed result for ${rollNo}`);
+        }
+    }
+
+    /**
+     * Store HTML result in database
+     */
+    static async storeHtmlResult(rollNo, htmlContent) {
+        try {
+            // Extract basic info for quick reference
+            const parsedData = this.extractBasicInfo(htmlContent);
+            
+            const htmlResult = new HtmlResult({
+                rollNo: rollNo,
+                htmlContent: htmlContent,
+                parsedData: parsedData
+            });
+            
+            await htmlResult.save();
+            console.log(`Stored HTML for ${rollNo} in database`);
+            
+        } catch (error) {
+            // If it's a duplicate key error, update the existing record
+            if (error.code === 11000) {
+                await HtmlResult.findOneAndUpdate(
+                    { rollNo: rollNo },
+                    { 
+                        htmlContent: htmlContent,
+                        parsedData: this.extractBasicInfo(htmlContent),
+                        fetchedAt: new Date(),
+                        isActive: true
+                    }
+                );
+                console.log(`Updated HTML for ${rollNo} in database`);
+            } else {
+                console.error(`Error storing HTML for ${rollNo}:`, error.message);
+            }
+        }
+    }
+
+    /**
+     * Extract basic info for storage (lighter version)
+     */
+    static extractBasicInfo(html) {
+        const $ = cheerio.load(html);
+        
+        return {
+            name: $('td:contains("Student Name")').next().text().trim(),
+            fatherName: $('td:contains("Father Name")').next().text().trim(),
+            branch: $('td:contains("Branch")').next().text().trim(),
+            semester: $('td:contains("Semester")').next().text().trim(),
+            sgpa: $('td:contains("SGPA")').next().text().trim(),
+            cgpa: $('td:contains("CGPA")').next().text().trim(),
+            result: $('td:contains("Result")').next().text().trim()
+        };
+    }
+
+    /**
+     * Extract detailed data from HTML response
+     */
+    static extractDetailedData(html) {
+        const $ = cheerio.load(html);
+        
+        // Extract basic info
+        const name = $('td:contains("Student Name")').next().text().trim();
+        const rollNo = $('td:contains("Roll Number")').next().text().trim();
+        const fatherName = $('td:contains("Father Name")').next().text().trim();
+        const branch = $('td:contains("Branch")').next().text().trim();
+        const semester = $('td:contains("Semester")').next().text().trim();
+        const sgpa = $('td:contains("SGPA")').next().text().trim();
+        const cgpa = $('td:contains("CGPA")').next().text().trim();
+        const result = $('td:contains("Result")').next().text().trim();
+        
+        // Extract subject-wise marks
+        const subjects = [];
+        $('table').each((index, table) => {
+            $(table).find('tr').each((rowIndex, row) => {
+                const cells = $(row).find('td');
+                if (cells.length >= 5) {
+                    const subjectCode = $(cells[0]).text().trim();
+                    const subjectName = $(cells[1]).text().trim();
+                    const internalMarks = $(cells[2]).text().trim();
+                    const externalMarks = $(cells[3]).text().trim();
+                    const totalMarks = $(cells[4]).text().trim();
+                    const grade = $(cells[5]) ? $(cells[5]).text().trim() : '';
+                    
+                    if (subjectCode && subjectName && !subjectCode.includes('Subject')) {
+                        subjects.push({
+                            subjectCode,
+                            subjectName,
+                            internalMarks,
+                            externalMarks,
+                            totalMarks,
+                            grade
+                        });
+                    }
+                }
+            });
+        });
+        
+        return {
+            basicInfo: {
+                name,
+                rollNo,
+                fatherName,
+                branch,
+                semester,
+                sgpa,
+                cgpa,
+                result
+            },
+            subjects,
+            fetchedAt: new Date().toISOString()
+        };
+    }
+
+    /**
+     * Get raw HTML for a specific student (utility method)
+     */
+    static async getStoredHtml(rollNo) {
+        try {
+            const htmlData = await HtmlResult.findOne({ rollNo: rollNo, isActive: true });
+            if (htmlData) {
+                // Update last accessed time
+                htmlData.lastAccessed = new Date();
+                await htmlData.save();
+                return {
+                    rollNo: htmlData.rollNo,
+                    htmlContent: htmlData.htmlContent,
+                    fetchedAt: htmlData.fetchedAt,
+                    lastAccessed: htmlData.lastAccessed,
+                    contentSize: htmlData.contentSize
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error(`Error getting stored HTML for ${rollNo}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Get HTML storage statistics
+     */
+    static async getHtmlStats() {
+        try {
+            const totalCount = await HtmlResult.countDocuments({ isActive: true });
+            const totalSize = await HtmlResult.aggregate([
+                { $match: { isActive: true } },
+                { $group: { _id: null, totalSize: { $sum: "$contentSize" } } }
+            ]);
+            
+            const recentCount = await HtmlResult.countDocuments({
+                isActive: true,
+                fetchedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+            });
+
+            return {
+                totalFiles: totalCount,
+                totalSizeBytes: totalSize[0]?.totalSize || 0,
+                totalSizeMB: ((totalSize[0]?.totalSize || 0) / (1024 * 1024)).toFixed(2),
+                recentFiles24h: recentCount
+            };
+        } catch (error) {
+            console.error('Error getting HTML stats:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Clean old HTML files (utility for maintenance)
+     */
+    static async cleanOldHtmlFiles(daysOld = 30) {
+        try {
+            const cutoffDate = new Date(Date.now() - (daysOld * 24 * 60 * 60 * 1000));
+            
+            const result = await HtmlResult.deleteMany({
+                fetchedAt: { $lt: cutoffDate },
+                lastAccessed: { $lt: cutoffDate }
+            });
+            
+            console.log(`Cleaned ${result.deletedCount} old HTML files`);
+            return result.deletedCount;
+        } catch (error) {
+            console.error('Error cleaning old HTML files:', error);
+            return 0;
+        }
     }
 }
