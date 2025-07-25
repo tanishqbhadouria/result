@@ -73,31 +73,31 @@ export const ResultTable = () => {
 
       {/* Modal for HTML content */}
       {showModal && htmlContent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-4 border-b flex justify-between items-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
+          <div className="bg-white rounded-lg w-[95vw] h-[95vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
               <h2 className="text-xl font-bold text-gray-800">Student Result Details</h2>
               <button
                 onClick={closeModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none"
               >
                 ×
               </button>
             </div>
             
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden p-2">
               <iframe
                 srcDoc={htmlContent}
-                className="w-full h-full border-0"
+                className="w-full h-full border-0 rounded"
                 title="Student Result"
                 sandbox="allow-same-origin"
               />
             </div>
             
-            <div className="p-4 border-t text-center">
+            <div className="p-4 border-t text-center bg-gray-50">
               <button
                 onClick={closeModal}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded transition-colors duration-200"
+                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg transition-colors duration-200 font-medium"
               >
                 Close
               </button>
